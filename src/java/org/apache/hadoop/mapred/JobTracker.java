@@ -1230,6 +1230,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //     reexecution if all downstream Tasks that require its output have already obtained
   //     the necessary files.
   //
+  
+  // Trackers and their virtual loads. (trackerID -> virtual load)
+  Map<String, Integer> trackerLoads = 
+	  new HashMap<String, Integer>();
+  
+  // Trackers and their pre-assigned tasks. (trackerID -> list of tasks)
+  Map<String, Set<TaskAttemptID>> trackerTasks = 
+	  new HashMap<String, Set<TaskAttemptID>>();
 
   // All the known jobs.  (jobid->JobInProgress)
   Map<JobID, JobInProgress> jobs =  
@@ -2396,6 +2404,42 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   }
   
   ////////////////////////////////////////////////////
+  //	Bal-Assign Task Assignment					//
+  ////////////////////////////////////////////////////
+  
+  public Set<TaskAttemptID>getTasksForTracker(TaskTrackerStatus status) {
+	  return trackerTasks.get(status.getTrackerName());
+  }
+  
+  // balAssign tasks for this job
+  public void balAssign(JobID jobid) {
+	  JobInProgress job = jobs.get(jobid);
+      if (job != null) {
+    	  int numMapTasks = job.desiredMaps();
+		  // assemble the list of tasks that need to be assigned
+		  TaskInProgress[] mapTasks = job.getTasks(TaskType.MAP);
+		  // assemble list of TaskTrackers that are available
+		  // Calculate minimum virtual load
+		  int minVirtualLoad = 0;
+		  Iterator it = trackerLoads.values().iterator();
+		  while	(it.hasNext()) {
+			  Map.Entry pairs = (Map.Entry)it.next();
+			  int virtualLoad = ((Integer) pairs.getValue()).intValue();
+			  String taskTrackerName = (String)pairs.getKey();
+			  if (virtualLoad == minVirtualLoad) {
+				  // assign a new task to this tasktracker
+				  //trackerTasks.put(taskTrackerName, nextTask);
+				  // increment the virtual load
+				  minVirtualLoad = Collections.min(trackerLoads.values());
+			  }
+		  }
+		  
+		
+		  // Assign next unassigned task to server with min virtual load
+      }
+  }
+  
+  ////////////////////////////////////////////////////
   // InterTrackerProtocol
   ////////////////////////////////////////////////////
   
@@ -2443,8 +2487,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     
     HeartbeatResponse prevHeartbeatResponse =
       trackerToHeartbeatResponseMap.get(trackerName);
+    
+    // If this is the 'initial contact' from the TaskTracker, then add
+    //	this new known TaskTracker to trackerLoads and trackerTasks with
+    //	virtual load = 0 and tasks = empty set
+    if (initialContact == true) {
+    	
+    }
 
-    if (initialContact != true) {
+    else if (initialContact != true) {
       // If this isn't the 'initial contact' from the tasktracker,
       // there is something seriously wrong if the JobTracker has
       // no record of the 'previous heartbeat'; if so, ask the 
@@ -2483,6 +2534,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       if (prevHeartbeatResponse != null) {
         trackerToHeartbeatResponseMap.remove(trackerName);
       }
+      // reinitialize tracker if cannot process heartbeat
       return new HeartbeatResponse(newResponseId, 
                    new TaskTrackerAction[] {new ReinitTrackerAction()});
     }
@@ -2498,6 +2550,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         LOG.warn("Unknown task tracker polling; ignoring: " + trackerName);
       } else {
         List<Task> tasks = getSetupAndCleanupTasks(taskTrackerStatus);
+        // If there are no setup or cleanup tasks, then assign tasks
         if (tasks == null ) {
           tasks = taskScheduler.assignTasks(taskTrackers.get(trackerName));
         }
@@ -2755,6 +2808,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
           if (seenBefore) {
             lostTaskTracker(taskTracker);
           }
+          // Add to trackerLoads with load = 0
+          trackerLoads.put(trackerName, 0);
         } else {
           // If not first contact, there should be some record of the tracker
           if (!seenBefore) {

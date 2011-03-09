@@ -124,7 +124,7 @@ import org.apache.hadoop.mapreduce.util.MRAsyncDiskService;
  * TaskTracker is a process that starts and tracks MR Tasks
  * in a networked environment.  It contacts the JobTracker
  * for Task assignments and reporting results.
- *
+ * 
  *******************************************************/
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
