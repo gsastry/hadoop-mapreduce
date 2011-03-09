@@ -2411,13 +2411,19 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  return trackerTasks.get(status.getTrackerName());
   }
   
+  public void scheduleTasksAllJobs () {
+	  //TaskInProgress[] mapTasksForJob = job.getTasks(TaskType.MAP);
+  }
+  
+  public void scheduleTasks(JobInProgress job, TaskInProgress[] mapTasks) {
+	  balAssign (job, mapTasks);
+  }
+  
   // balAssign tasks for this job
-  public void balAssign(JobID jobid) {
-	  JobInProgress job = jobs.get(jobid);
+  public void balAssign(JobInProgress job, TaskInProgress[] mapTasks) {
       if (job != null) {
     	  int numMapTasks = job.desiredMaps();
 		  // assemble the list of tasks that need to be assigned
-		  TaskInProgress[] mapTasks = job.getTasks(TaskType.MAP);
 		  // assemble list of TaskTrackers that are available
 		  // Calculate minimum virtual load
 		  int minVirtualLoad = 0;
@@ -2430,6 +2436,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  // assign a new task to this tasktracker
 				  //trackerTasks.put(taskTrackerName, nextTask);
 				  // increment the virtual load
+				  // 	is the task just assigned local?
+				  //	is the task just assigned nonlocal?
 				  minVirtualLoad = Collections.min(trackerLoads.values());
 			  }
 		  }
@@ -2808,8 +2816,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
           if (seenBefore) {
             lostTaskTracker(taskTracker);
           }
-          // Add to trackerLoads with load = 0
-          trackerLoads.put(trackerName, 0);
         } else {
           // If not first contact, there should be some record of the tracker
           if (!seenBefore) {
@@ -2826,6 +2832,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
             faultyTrackers.incrBlackListedTrackers(1);
           }
           addNewTracker(taskTracker);
+          // Add to trackerLoads with load = 0
+          trackerLoads.put(trackerName, 0);
         }
       }
     }

@@ -92,6 +92,7 @@ public class FakeObjectUtilities {
       numMapTasks = taskSplitMetaInfo.length;
       createMapTasks(null, taskSplitMetaInfo);
       nonRunningMapCache = createCache(taskSplitMetaInfo, maxLevel);
+      localityGraph = nonRunningMapCache;
       createReduceTasks(null);
       tasksInited.set(true);
       this.status.setRunState(JobStatus.RUNNING);

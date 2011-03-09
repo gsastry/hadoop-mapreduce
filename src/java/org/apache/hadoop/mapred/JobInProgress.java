@@ -153,6 +153,9 @@ public class JobInProgress {
   protected Credentials tokenStorage;
   
   JobHistory jobHistory;
+  
+  // Locality graph for the network
+  Map<Node, List<TaskInProgress>> localityGraph;
 
   // NetworkTopology Node to the set of TIPs
   Map<Node, List<TaskInProgress>> nonRunningMapCache;
@@ -644,11 +647,14 @@ public class JobInProgress {
     jobtracker.getInstrumentation().addWaitingMaps(getJobID(), numMapTasks);
     jobtracker.getInstrumentation().addWaitingReduces(getJobID(), numReduceTasks);
 
+    // initializes maps[] construct
     createMapTasks(jobFile.toString(), taskSplitMetaInfo);
     
     if (numMapTasks > 0) { 
       nonRunningMapCache = createCache(taskSplitMetaInfo,
           maxLevel);
+      // get locality graph at beginning before nonRunningMapCache is modified
+      localityGraph = nonRunningMapCache;
     }
         
     // set the launch time
@@ -2189,6 +2195,13 @@ public class JobInProgress {
 
       return -1; //see if a different TIP might work better. 
     }
+    
+    /*
+     * *******************************************************************
+     * This next part will be replaced by just fetching from masterList in
+     * JobTracker (i.e. the cache is the masterlist)
+     *********************************************************************
+     */
     
     
     // For scheduling a map task, we have two caches and a list (optional)
