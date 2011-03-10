@@ -1236,8 +1236,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  new HashMap<String, Integer>();
   
   // Trackers and their pre-assigned tasks. (trackerID -> list of tasks)
-  Map<String, Set<TaskAttemptID>> trackerTasks = 
-	  new HashMap<String, Set<TaskAttemptID>>();
+  Map<String, List<TaskInProgress>> trackerTasks = 
+	  new HashMap<String, List<TaskInProgress>>();
 
   // All the known jobs.  (jobid->JobInProgress)
   Map<JobID, JobInProgress> jobs =  
@@ -2403,12 +2403,27 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     return queueManager;
   }
   
+  public List<TaskInProgress> getTrackerTasks(String taskTrackerName) {
+	  return trackerTasks.get(taskTrackerName);
+  }
+  
   ////////////////////////////////////////////////////
   //	Bal-Assign Task Assignment					//
   ////////////////////////////////////////////////////
   
-  public Set<TaskAttemptID>getTasksForTracker(TaskTrackerStatus status) {
-	  return trackerTasks.get(status.getTrackerName());
+  // maybe @deprecated...
+  public List<TaskInProgress> getTasksForTracker(String taskTrackerName) {
+	  return trackerTasks.get(taskTrackerName);
+  }
+  
+  /*
+   * returns the head of the task list assigned to the given taskTrackerName.
+   * modifies original task list to reflect this change.
+   */
+  public TaskInProgress getNextTaskForTracker(String taskTrackerName) {
+	  synchronized (trackerTasks.get(taskTrackerName)) {
+		  return trackerTasks.get(taskTrackerName).remove(0);
+	  }
   }
   
   public void scheduleTasksAllJobs () {

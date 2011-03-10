@@ -2145,6 +2145,69 @@ public class JobInProgress {
 
   return slowestTIP;
   }
+  
+  /**
+   * Retrieve a new map task from the assignments computed by the JobTracker
+   * @param tts The task tracker that is asking for a task
+   * @param clusterSize The number of task trackers in the cluster
+   * @param numUniqueHosts The number of hosts that run task trackers
+   * @param maxCacheLevel The maximum topology level until which to schedule
+   *                      maps. 
+   *                      A value of {@link #anyCacheLevel} implies any 
+   *                      available task (node-local, rack-local, off-switch and 
+   *                      speculative tasks).
+   *                      A value of {@link #NON_LOCAL_CACHE_LEVEL} implies only
+   *                      off-switch/speculative tasks should be scheduled.
+   * @return the index in tasks of the selected task (or -1 for no task)
+   */
+  private synchronized TaskInProgress getNewMapTask(final TaskTrackerStatus tts,
+		  								 			final int clusterSize,
+		  								 			final int numUniqueHosts,
+		  								 			final int maxCacheLevel) {
+    TaskInProgress tip = null;
+    String taskTrackerName = tts.getTrackerName();
+    String taskTrackerHost = tts.getHost();
+    if (numMapTasks == 0) {
+      if(LOG.isDebugEnabled()) {
+        LOG.debug("No maps to schedule for " + profile.getJobID());
+      }
+      return tip;
+    }
+
+    
+    //
+    // Update the last-known clusterSize
+    //
+    this.clusterSize = clusterSize;
+
+    if (!shouldRunOnTaskTracker(taskTrackerName)) {
+      return tip;
+    }
+
+    // Check to ensure this TaskTracker has enough resources to 
+    // run tasks from this job
+    long outSize = resourceEstimator.getEstimatedMapOutputSize();
+    long availSpace = tts.getResourceStatus().getAvailableSpace();
+    if(availSpace < outSize) {
+      LOG.warn("No room for map task. Node " + tts.getHost() + 
+               " has " + availSpace + 
+               " bytes free; but we expect map to take " + outSize);
+
+      return tip; //see if a different TIP might work better. 
+    }
+    
+    /*******************
+     * This next stuff should be synchronized...
+     */
+    // get list of tasks assigned to this tasktracker
+    List<TaskInProgress> tasks = jobtracker.getTrackerTasks(taskTrackerName);
+    
+    // remvoe and use next task assigned to this tasktracker
+    
+    TaskInProgress nextTask = jobtracker.getNextTaskForTracker(taskTrackerName);
+    
+    return tip;
+  }
 
   /**
    * Find new map task
