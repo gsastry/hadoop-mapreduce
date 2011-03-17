@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.security.auth.login.LoginException;
 
+import org.apache.avro.Schema.Type;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -195,6 +196,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   // system files should have 700 permission
   final static FsPermission SYSTEM_FILE_PERMISSION =
     FsPermission.createImmutable((short) 0700); // rwx------
+  
+  /* first taskTracker? */
+  private boolean isFirstHeartbeat = false;
   
   private static Clock clock = null;
   
@@ -2411,7 +2415,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //	Bal-Assign Task Assignment					//
   ////////////////////////////////////////////////////
   
-  // maybe @deprecated...
+  // maybe don't need...
   public List<TaskInProgress> getTasksForTracker(String taskTrackerName) {
 	  return trackerTasks.get(taskTrackerName);
   }
@@ -2426,15 +2430,28 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  }
   }
   
+  /* schedule tasks for all jobs. Right now this ASSUMES THAT THERE IS ONLY
+   * one job, and thus breaks after scfheduling tasks for the one job.
+   */
   public void scheduleTasksAllJobs () {
-	  //TaskInProgress[] mapTasksForJob = job.getTasks(TaskType.MAP);
+	  TaskInProgress mapTasks[] = null;
+	  for(JobInProgress job : jobs.values()){
+		  mapTasks = job.getTasks(TaskType.MAP);
+		  scheduleTasks(job, mapTasks);
+		  break ;
+	  }
   }
   
   public void scheduleTasks(JobInProgress job, TaskInProgress[] mapTasks) {
+	  // maxCover (job, mapTasks);
 	  balAssign (job, mapTasks);
   }
   
-  // balAssign tasks for this job
+  /*
+   * balAssign tasks for this job
+   * @param: mapTasks is meant to be immutable
+   * @param: job is meant to be immutable.
+   */
   public void balAssign(JobInProgress job, TaskInProgress[] mapTasks) {
       if (job != null) {
     	  int numMapTasks = job.desiredMaps();
@@ -2445,14 +2462,45 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  Iterator it = trackerLoads.values().iterator();
 		  while	(it.hasNext()) {
 			  Map.Entry pairs = (Map.Entry)it.next();
+			  // virtual load for this tracker
 			  int virtualLoad = ((Integer) pairs.getValue()).intValue();
+			  // name of task tracker
 			  String taskTrackerName = (String)pairs.getKey();
+			  // List of all map tasks that need to be assigned
+			  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
+			  // List of tasks for this taskTracker
+			  List<TaskInProgress> newTasks = trackerTasks.get(taskTrackerName);
+			  // TaskTrackerStatus for this taskTracker
+			  TaskTrackerStatus tts = 
+				  taskTrackers.get(taskTrackerName).getStatus();
+			  // locality level for this taskTracker
+			  int lvl = -1;
+			  // cost of assignment (used for virtual load)
+			  int cost = 0;
+			  // next assigned task
+			  TaskInProgress nextTask = mapTasks[0];
 			  if (virtualLoad == minVirtualLoad) {
-				  // assign a new task to this tasktracker
-				  //trackerTasks.put(taskTrackerName, nextTask);
+				  // assign a new task to this taskTracker
+				  newTasks.add(nextTask);
+				  trackerTasks.put(taskTrackerName, newTasks);
+				  mapsList.remove(0);
+				  
 				  // increment the virtual load
 				  // 	is the task just assigned local?
 				  //	is the task just assigned nonlocal?
+				  lvl = job.getLocalityLevel(nextTask, tts);
+				  cost = 1 + lvl;
+				  switch (lvl) {
+				  case 0:
+					  LOG.info("Assigning data-local task ");
+				  case 1:
+					  LOG.info("Assigning rack-local task ");
+				  default:
+					  LOG.info("Assigning remote task of cost " + lvl);
+				  }
+				  
+				  virtualLoad += cost;
+				  trackerLoads.put(taskTrackerName, virtualLoad);
 				  minVirtualLoad = Collections.min(trackerLoads.values());
 			  }
 		  }
@@ -2819,6 +2867,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     getInstrumentation().heartbeat();
 
     String trackerName = trackerStatus.getTrackerName();
+    
+    /* does this need to be a mutex? */
+    if (isFirstHeartbeat) {
+    	isFirstHeartbeat = false;
+    	scheduleTasksAllJobs();
+    }
 
     synchronized (taskTrackers) {
       synchronized (trackerExpiryQueue) {

@@ -2196,13 +2196,10 @@ public class JobInProgress {
       return tip; //see if a different TIP might work better. 
     }
     
-    /*******************
-     * This next stuff should be synchronized...
-     */
     // get list of tasks assigned to this tasktracker
     List<TaskInProgress> tasks = jobtracker.getTrackerTasks(taskTrackerName);
     
-    // remvoe and use next task assigned to this tasktracker
+    // remove and use next task assigned to this tasktracker
     
     TaskInProgress nextTask = jobtracker.getNextTaskForTracker(taskTrackerName);
     
