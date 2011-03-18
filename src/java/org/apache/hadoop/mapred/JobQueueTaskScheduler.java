@@ -134,17 +134,12 @@ class JobQueueTaskScheduler extends TaskScheduler {
     // in order of job arrival; jobs only get serviced if their 
     // predecessors are serviced, too.
     //
-
-    //
-    // We assign tasks to the current taskTracker if the given machine 
-    // has a workload that's less than the maximum load of that kind of
-    // task.
-    // However, if the cluster is close to getting loaded i.e. we don't
-    // have enough _padding_ for speculative executions etc., we only 
-    // schedule the "highest priority" task i.e. the task from the job 
-    // with the highest priority.
-    //
     
+    /*
+     * We assign tasks to the current taskTracker by calling the 
+     * getNewMapTask() function from JobInProgress, which fetches
+     * a precomputed task assignment from JobTracker
+     */
     final int trackerCurrentMapCapacity = 
       Math.min((int)Math.ceil(mapLoadFactor * trackerMapCapacity), 
                               trackerMapCapacity);
@@ -155,8 +150,38 @@ class JobQueueTaskScheduler extends TaskScheduler {
         exceededPadding(true, clusterStatus, trackerMapCapacity);
     }
     
-    int numLocalMaps = 0;
-    int numNonLocalMaps = 0;
+	for (int i = 0; i < availableMapSlots; ++i) {
+		synchronized (jobQueue) {
+			for (JobInProgress job : jobQueue) {
+				if (job.getStatus().getRunState() != JobStatus.RUNNING) {
+					continue ;
+				}
+				int numUniqueHosts = 
+					taskTrackerManager.getNumberOfUniqueHosts();
+				Task t = null;
+				t = 
+					job.selectNewMapTask(taskTrackerStatus,
+										 numTaskTrackers,
+										 numUniqueHosts);
+				if (t != null) {
+					assignedTasks.add(t);
+				}
+										 
+			}
+		}
+	}
+
+    //
+    // We assign tasks to the current taskTracker if the given machine 
+    // has a workload that's less than the maximum load of that kind of
+    // task.
+    // However, if the cluster is close to getting loaded i.e. we don't
+    // have enough _padding_ for speculative executions etc., we only 
+    // schedule the "highest priority" task i.e. the task from the job 
+    // with the highest priority.
+    //
+	
+	/*
     scheduleMaps:
     for (int i=0; i < availableMapSlots; ++i) {
       synchronized (jobQueue) {
@@ -202,7 +227,7 @@ class JobQueueTaskScheduler extends TaskScheduler {
           }
         }
       }
-    }
+    } */
     int assignedMaps = assignedTasks.size();
 
     //
@@ -249,8 +274,8 @@ class JobQueueTaskScheduler extends TaskScheduler {
                 "[" + mapLoadFactor + ", " + trackerMapCapacity + ", " + 
                 trackerCurrentMapCapacity + ", " + trackerRunningMaps + "] -> [" + 
                 (trackerCurrentMapCapacity - trackerRunningMaps) + ", " +
-                assignedMaps + " (" + numLocalMaps + ", " + numNonLocalMaps + 
-                ")] [" + reduceLoadFactor + ", " + trackerReduceCapacity + ", " + 
+                assignedMaps 
+                + reduceLoadFactor + ", " + trackerReduceCapacity + ", " + 
                 trackerCurrentReduceCapacity + "," + trackerRunningReduces + 
                 "] -> [" + (trackerCurrentReduceCapacity - trackerRunningReduces) + 
                 ", " + (assignedTasks.size()-assignedMaps) + "]");

@@ -1288,6 +1288,32 @@ public class JobInProgress {
   /////////////////////////////////////////////////////
   // Create/manage tasks
   /////////////////////////////////////////////////////
+  
+  /*
+   * Return a mapTask computed by FlowScheduling algorithm to run
+   * on the given taskTracker
+   */
+  public synchronized Task selectNewMapTask(TaskTrackerStatus tts,
+		  									int clusterSize,
+		  									int numUniqueHosts
+		  									) throws IOException {
+	  if (status.getRunState() != JobStatus.RUNNING) {
+		  LOG.info ("Cannot create task split for " + profile.getJobID());
+		  return null;
+	  }
+	  
+	  TaskInProgress t = 
+		  getNewMapTask(tts, clusterSize, numUniqueHosts);
+	  
+	  if (t == null) {
+		  LOG.info("Retrieved a null task from preassigned tasks");
+		  return null;
+	  }
+	  
+	  Task result = t.getTaskToRun(tts.getTrackerName());
+	  
+	  return result;
+  }
   /**
    * Return a MapTask, if appropriate, to run on the given tasktracker
    */
@@ -2162,8 +2188,8 @@ public class JobInProgress {
    */
   private synchronized TaskInProgress getNewMapTask(final TaskTrackerStatus tts,
 		  								 			final int clusterSize,
-		  								 			final int numUniqueHosts,
-		  								 			final int maxCacheLevel) {
+		  								 			final int numUniqueHosts
+		  								 			) {
     TaskInProgress tip = null;
     String taskTrackerName = tts.getTrackerName();
     String taskTrackerHost = tts.getHost();
