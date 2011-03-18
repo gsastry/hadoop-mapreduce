@@ -1242,6 +1242,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   // Trackers and their pre-assigned tasks. (trackerID -> list of tasks)
   Map<String, List<TaskInProgress>> trackerTasks = 
 	  new HashMap<String, List<TaskInProgress>>();
+  
+  Map<String, Integer> currTrackerLoads = 
+	  new HashMap<String,Integer>();
+  
+  Map<String,List<TaskInProgress>> currTrackerTasks = 
+	  new HashMap<String, List<TaskInProgress>>();
+  
 
   // All the known jobs.  (jobid->JobInProgress)
   Map<JobID, JobInProgress> jobs =  
@@ -2431,7 +2438,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   }
   
   /* schedule tasks for all jobs. Right now this ASSUMES THAT THERE IS ONLY
-   * one job, and thus breaks after scfheduling tasks for the one job.
+   * one job, and thus breaks after scheduling tasks for the one job.
    */
   public void scheduleTasksAllJobs () {
 	  TaskInProgress mapTasks[] = null;
@@ -2442,24 +2449,78 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  }
   }
   
+  /*
+   * schedules tasks for a given
+   * @param job	 -- job to schedule tasks for
+   * @param mapTasks -- the tasks to schedule
+   * 
+   * After scheduleTasks() is run, 
+   * trackerLoads contains taskTrackers and their virtual loads;
+   * trackerTasks contains taskTrackers and their computed task assignments
+   */
   public void scheduleTasks(JobInProgress job, TaskInProgress[] mapTasks) {
-	  // maxCover (job, mapTasks);
-	  balAssign (job, mapTasks);
+	  int numMapTasks_debug = job.desiredMaps();
+	  int numMapTasks = mapTasks.length;
+	  
+	  if (numMapTasks != numMapTasks_debug) {
+		  LOG.debug("Expected number of maps is different from actual num");
+	  }
+	  
+	  TaskInProgress remainingMaps[] = Arrays.copyOf(mapTasks, numMapTasks);
+	  int leastMaxLoad = 0;
+	  int currMaxLoad = 0;
+	  for (int i = 0; i < numMapTasks; ++i) {
+		  // clear previous task assignments
+		  currTrackerTasks.clear();
+		  currTrackerLoads.clear();
+		  // maxCover (job, remainingMaps);
+		  currMaxLoad = balAssign(job, remainingMaps);
+		  if (currMaxLoad < 0) {
+			  LOG.info("Tried to assign tasks to a null job");
+			  break ;
+		  }
+		  if (currMaxLoad < leastMaxLoad) {
+			  // found an assignment with better leastMaxLoad
+			  // set trackerLoads and trackerTasks with values from 
+			  //	new assignment
+			  leastMaxLoad = currMaxLoad;
+			  trackerLoads.clear();
+			  trackerTasks.clear();
+			  trackerLoads = new HashMap<String, Integer>(currTrackerLoads);
+			  trackerTasks = 
+				  new HashMap<String,List<TaskInProgress>>(currTrackerTasks);
+			  
+		  }
+	  }
+  }
+  
+  /*
+   * maxCover tasks for this job
+   * 
+   */
+  public void maxCover(JobInProgress job, TaskInProgress[] mapTasks) {
+	  
   }
   
   /*
    * balAssign tasks for this job
    * @param: mapTasks is meant to be immutable
    * @param: job is meant to be immutable.
+   * 
+   * Receives a partial assignment (partially filled trackerLoads and
+   * trackerTasks, with a reduced mapTasks array), and computes the 
+   * remaining total assignment
    */
-  public void balAssign(JobInProgress job, TaskInProgress[] mapTasks) {
+  public int balAssign(JobInProgress job, TaskInProgress[] mapTasks) {
       if (job != null) {
-    	  int numMapTasks = job.desiredMaps();
 		  // assemble the list of tasks that need to be assigned
 		  // assemble list of TaskTrackers that are available
 		  // Calculate minimum virtual load
-		  int minVirtualLoad = 0;
-		  Iterator it = trackerLoads.values().iterator();
+    	  int minVirtualLoad = 0;
+    	  if (!currTrackerLoads.values().isEmpty()) {
+			  minVirtualLoad = Collections.min(currTrackerLoads.values());
+    	  }
+		  Iterator it = currTrackerLoads.values().iterator();
 		  while	(it.hasNext()) {
 			  Map.Entry pairs = (Map.Entry)it.next();
 			  // virtual load for this tracker
@@ -2469,7 +2530,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  // List of all map tasks that need to be assigned
 			  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
 			  // List of tasks for this taskTracker
-			  List<TaskInProgress> newTasks = trackerTasks.get(taskTrackerName);
+			  List<TaskInProgress> newTasks = 
+				  currTrackerTasks.get(taskTrackerName);
 			  // TaskTrackerStatus for this taskTracker
 			  TaskTrackerStatus tts = 
 				  taskTrackers.get(taskTrackerName).getStatus();
@@ -2482,7 +2544,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  if (virtualLoad == minVirtualLoad) {
 				  // assign a new task to this taskTracker
 				  newTasks.add(nextTask);
-				  trackerTasks.put(taskTrackerName, newTasks);
+				  currTrackerTasks.put(taskTrackerName, newTasks);
 				  mapsList.remove(0);
 				  
 				  // increment the virtual load
@@ -2500,14 +2562,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  }
 				  
 				  virtualLoad += cost;
-				  trackerLoads.put(taskTrackerName, virtualLoad);
-				  minVirtualLoad = Collections.min(trackerLoads.values());
+				  currTrackerLoads.put(taskTrackerName, virtualLoad);
+				  minVirtualLoad = Collections.min(currTrackerLoads.values());
 			  }
 		  }
-		  
-		
-		  // Assign next unassigned task to server with min virtual load
+		  return Collections.max(currTrackerLoads.values());
       }
+      return -1;
   }
   
   ////////////////////////////////////////////////////

@@ -3788,6 +3788,10 @@ public class JobInProgress {
         + keysFile.toUri().getPath());
   }
 
+  
+  public String[] getLocalityGraph() {
+	  return null;
+  }
   public String getJobSubmitHostAddress() {
     return submitHostAddress;
   }
