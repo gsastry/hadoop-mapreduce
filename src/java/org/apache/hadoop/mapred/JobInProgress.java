@@ -155,7 +155,8 @@ public class JobInProgress {
   JobHistory jobHistory;
   
   // Locality graph for the network
-  Map<Node, List<TaskInProgress>> localityGraph;
+  // TaskInProgress --> array of hostnames that host its data
+  Map<TaskInProgress, String[]> localityGraph;
 
   // NetworkTopology Node to the set of TIPs
   Map<Node, List<TaskInProgress>> nonRunningMapCache;
@@ -654,7 +655,8 @@ public class JobInProgress {
       nonRunningMapCache = createCache(taskSplitMetaInfo,
           maxLevel);
       // get locality graph at beginning before nonRunningMapCache is modified
-      localityGraph = nonRunningMapCache;
+      // localityGraph = 
+    	 // new HashMap<Node, List<TaskInProgress>>(nonRunningMapCache);
     }
         
     // set the launch time
@@ -3788,9 +3790,17 @@ public class JobInProgress {
         + keysFile.toUri().getPath());
   }
 
+  // intialize locality graph with split locatations for each map task
+  public void initLocalityGraph() {
+	  for (TaskInProgress tip : maps) {
+		  localityGraph.put(tip, tip.getSplitLocations());
+		 
+	  }
+  }
   
-  public String[] getLocalityGraph() {
-	  return null;
+  // return the localityGraph
+  public Map<TaskInProgress, String[]> getLocalityGraph() {
+	  return localityGraph;
   }
   public String getJobSubmitHostAddress() {
     return submitHostAddress;

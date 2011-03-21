@@ -1336,6 +1336,10 @@ class TaskInProgress {
     }
     
   }
+  
+  public String toString() {
+	  return "task" +  getIdWithinJob();
+  }
 
   TreeMap<TaskAttemptID, String> getActiveTasks() {
     return activeTasks;

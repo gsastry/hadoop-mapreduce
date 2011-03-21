@@ -1249,6 +1249,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   Map<String,List<TaskInProgress>> currTrackerTasks = 
 	  new HashMap<String, List<TaskInProgress>>();
   
+  // taskInProgress |--> List<String>
+  // Maps a TIP to a list of the taskTrackers that can access it's data
+  // locally
+  Map<TaskInProgress, List<String>> localityGraph = 
+	  new HashMap<TaskInProgress, List<String>>();
+  
 
   // All the known jobs.  (jobid->JobInProgress)
   Map<JobID, JobInProgress> jobs =  
@@ -2473,7 +2479,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  // clear previous task assignments
 		  currTrackerTasks.clear();
 		  currTrackerLoads.clear();
-		  // maxCover (job, remainingMaps);
+		  // maxCover (job, remainingMaps, i);
 		  currMaxLoad = balAssign(job, remainingMaps);
 		  if (currMaxLoad < 0) {
 			  LOG.info("Tried to assign tasks to a null job");
@@ -2496,10 +2502,25 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   /*
    * maxCover tasks for this job
-   * 
+   * Uses a ford fulkerson algorithm to compute a maximum bipartite matching
    */
-  public void maxCover(JobInProgress job, TaskInProgress[] mapTasks) {
+  public void maxCover(JobInProgress job, 
+		  			   TaskInProgress[] mapTasks,
+		  			   int numTasksToAssign) {
+	  Map<TaskInProgress,String[]> localityGraph = job.getLocalityGraph();
 	  
+	  /* initialize our String (TaskInProgress) --> String[] (split locations)
+	   * localityGraph for input to the network flow algorithm
+	   */
+	  Map<String,String[]> localityGraphSplits =
+		  new HashMap<String,String[]>();
+	  
+	  Iterator itr = localityGraph.entrySet().iterator();
+	  while (itr.hasNext()) {
+		  Map.Entry pairs = (Map.Entry)itr.next();
+		  localityGraphSplits.put(pairs.getKey().toString(), 
+				  				  (String[])pairs.getValue());
+	  }
   }
   
   /*
