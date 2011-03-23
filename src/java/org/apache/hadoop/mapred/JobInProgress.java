@@ -651,6 +651,12 @@ public class JobInProgress {
     // initializes maps[] construct
     createMapTasks(jobFile.toString(), taskSplitMetaInfo);
     
+    /* 
+     * Now the map tasks are created, so let the JobTracker
+     * assign all the tasks to taskTrackers.
+     */
+    jobtracker.scheduleTasksAllJobs(maps);
+    
     if (numMapTasks > 0) { 
       nonRunningMapCache = createCache(taskSplitMetaInfo,
           maxLevel);
@@ -1742,9 +1748,13 @@ public class JobInProgress {
     // Ugly!
     // Convert the trackerName to it's host name
     int indexOfColon = trackerName.indexOf(":");
+    LOG.info("indexOfColon is " + indexOfColon);
     String trackerHostName = (indexOfColon == -1) ? 
       trackerName : 
       trackerName.substring(0, indexOfColon);
+    LOG.info("trackerHostName is " + trackerHostName);
+    LOG.info("tracker_.length() is " + "tracker_".length());
+    LOG.info("should be returning: " + trackerHostName.substring(8));
     return trackerHostName.substring("tracker_".length());
   }
     
@@ -2208,9 +2218,10 @@ public class JobInProgress {
     //
     this.clusterSize = clusterSize;
 
+    /*
     if (!shouldRunOnTaskTracker(taskTrackerName)) {
       return tip;
-    }
+    } */
 
     // Check to ensure this TaskTracker has enough resources to 
     // run tasks from this job

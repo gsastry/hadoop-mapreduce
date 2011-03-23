@@ -2446,11 +2446,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   /* schedule tasks for all jobs. Right now this ASSUMES THAT THERE IS ONLY
    * one job, and thus breaks after scheduling tasks for the one job.
    */
-  public void scheduleTasksAllJobs () {
-	  TaskInProgress mapTasks[] = null;
+  public void scheduleTasksAllJobs (TaskInProgress[] maps) {
 	  for(JobInProgress job : jobs.values()){
-		  mapTasks = job.getTasks(TaskType.MAP);
-		  scheduleTasks(job, mapTasks);
+		  scheduleTasks(job, maps);
 		  break ;
 	  }
   }
@@ -2951,11 +2949,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     String trackerName = trackerStatus.getTrackerName();
     
     /* does this need to be a mutex? */
+    /*
     if (isFirstHeartbeat) {
     	isFirstHeartbeat = false;
     	scheduleTasksAllJobs();
-    }
-
+    } */
+ 
     synchronized (taskTrackers) {
       synchronized (trackerExpiryQueue) {
         boolean seenBefore = updateTaskTrackerStatus(trackerName,
