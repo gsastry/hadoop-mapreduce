@@ -1319,6 +1319,11 @@ public class JobInProgress {
 	  }
 	  
 	  Task result = t.getTaskToRun(tts.getTrackerName());
+	  if (result != null) {
+		  addRunningTaskToTIP(t, result.getTaskID(), tts, true);
+		  LOG.info("Added taskID: " + result.getTaskID() + "to tasktracker: "
+				  + tts.getTrackerName());
+	  }
 	  
 	  return result;
   }

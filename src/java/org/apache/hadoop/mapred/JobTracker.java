@@ -2428,6 +2428,22 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //	Bal-Assign Task Assignment					//
   ////////////////////////////////////////////////////
   
+  private void initTrackerStructs() {
+	  Collection<TaskTrackerStatus> ttss = activeTaskTrackers();
+	  
+	  for (Iterator it = ttss.iterator(); it.hasNext(); ) {
+		  TaskTrackerStatus tts = (TaskTrackerStatus) it.next();
+		  String taskTrackerName = tts.trackerName;
+		  trackerLoads.put(taskTrackerName, 0);
+		  trackerTasks.put(taskTrackerName, new ArrayList<TaskInProgress>());
+	  }
+	  
+	  currTrackerLoads = 
+		  new HashMap<String,Integer>(trackerLoads);
+	  currTrackerTasks = 
+		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
+  }
+  
   // maybe don't need...
   public List<TaskInProgress> getTasksForTracker(String taskTrackerName) {
 	  return trackerTasks.get(taskTrackerName);
@@ -2448,6 +2464,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    */
   public void scheduleTasksAllJobs (TaskInProgress[] maps) {
 	  for(JobInProgress job : jobs.values()){
+		  initTrackerStructs();
 		  scheduleTasks(job, maps);
 		  break ;
 	  }
@@ -2470,7 +2487,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  LOG.debug("Expected number of maps is different from actual num");
 	  }
 	  
+	  // remaining number of maps to assign
 	  TaskInProgress remainingMaps[] = Arrays.copyOf(mapTasks, numMapTasks);
+	  LOG.info("Number of remaining maps before scheduling is: "
+			   + remainingMaps.length);
 	  int leastMaxLoad = 0;
 	  int currMaxLoad = 0;
 	  for (int i = 0; i < numMapTasks; ++i) {
@@ -2493,6 +2513,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  trackerLoads = new HashMap<String, Integer>(currTrackerLoads);
 			  trackerTasks = 
 				  new HashMap<String,List<TaskInProgress>>(currTrackerTasks);
+			  LOG.info("Computed new task assignment with max load = "
+					  + leastMaxLoad);
 			  
 		  }
 	  }
@@ -2525,6 +2547,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * balAssign tasks for this job
    * @param: mapTasks is meant to be immutable
    * @param: job is meant to be immutable.
+   * @return: the new maximum load for this assignment
    * 
    * Receives a partial assignment (partially filled trackerLoads and
    * trackerTasks, with a reduced mapTasks array), and computes the 
@@ -2587,6 +2610,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  }
 		  return Collections.max(currTrackerLoads.values());
       }
+      LOG.debug("Job is null, nothing to bal assign....");
       return -1;
   }
   
