@@ -2429,11 +2429,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   ////////////////////////////////////////////////////
   
   private void initTrackerStructs() {
+	  trackerLoads.clear();
+	  trackerTasks.clear();
+	  currTrackerLoads.clear();
+	  currTrackerTasks.clear();
 	  Collection<TaskTrackerStatus> ttss = activeTaskTrackers();
+	  
+	  if (ttss.isEmpty()) {
+		  LOG.info("Active task trackers returned an empty collection");
+	  }
+	  
+	  if (ttss.size() == 0) {
+		  LOG.info("Confirmed that size of active task trackers coll is 0");
+	  }
 	  
 	  for (Iterator it = ttss.iterator(); it.hasNext(); ) {
 		  TaskTrackerStatus tts = (TaskTrackerStatus) it.next();
 		  String taskTrackerName = tts.trackerName;
+		  LOG.info("Adding tracker " + taskTrackerName + "to tracker structs");
 		  trackerLoads.put(taskTrackerName, 0);
 		  trackerTasks.put(taskTrackerName, new ArrayList<TaskInProgress>());
 	  }
@@ -2442,6 +2455,26 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  new HashMap<String,Integer>(trackerLoads);
 	  currTrackerTasks = 
 		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
+	  LOG.info("Tracker structs initialized");
+	  LOG.info("trackerLoads: " + trackerLoads);
+	  LOG.info("trackerTasks: " + trackerTasks);
+	  LOG.info("currTrackerLoads: " + currTrackerLoads);
+	  LOG.info("currTrackerTasks: " + currTrackerTasks);
+  }
+  
+  private void resetCurrTrackerStructs() {
+	  Iterator it = currTrackerLoads.entrySet().iterator();
+	  while (it.hasNext()) {
+		  Map.Entry pairs = (Map.Entry)it.next();
+		  String taskTrackerName = (String)pairs.getKey();
+		  currTrackerLoads.put(taskTrackerName, 0);
+	  }
+	  it = currTrackerTasks.entrySet().iterator();
+	  while (it.hasNext()) {
+		  Map.Entry pairs = (Map.Entry)it.next();
+		  String taskTrackerName = (String)pairs.getKey();
+		  currTrackerTasks.put(taskTrackerName, new ArrayList<TaskInProgress>());
+	  }
   }
   
   // maybe don't need...
@@ -2495,8 +2528,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  int currMaxLoad = 0;
 	  for (int i = 0; i < numMapTasks; ++i) {
 		  // clear previous task assignments
-		  currTrackerTasks.clear();
-		  currTrackerLoads.clear();
+		  resetCurrTrackerStructs();
 		  // maxCover (job, remainingMaps, i);
 		  currMaxLoad = balAssign(job, remainingMaps);
 		  if (currMaxLoad < 0) {
@@ -2558,19 +2590,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  // assemble the list of tasks that need to be assigned
 		  // assemble list of TaskTrackers that are available
 		  // Calculate minimum virtual load
+    	  
+		  // List of all map tasks that need to be assigned
+		  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
+		  LOG.info("balAssign: num of maps is: " + mapsList.size());
     	  int minVirtualLoad = 0;
     	  if (!currTrackerLoads.values().isEmpty()) {
 			  minVirtualLoad = Collections.min(currTrackerLoads.values());
     	  }
-		  Iterator it = currTrackerLoads.values().iterator();
+    	  LOG.info("balAssign: minVirtualLoad is initially: " + minVirtualLoad);
+		  Iterator it = currTrackerLoads.entrySet().iterator();
+		  LOG.info("balAssign: " +
+		  		"Confirming that currTrackerLoads has size: " + currTrackerLoads.size());
 		  while	(it.hasNext()) {
 			  Map.Entry pairs = (Map.Entry)it.next();
 			  // virtual load for this tracker
 			  int virtualLoad = ((Integer) pairs.getValue()).intValue();
 			  // name of task tracker
 			  String taskTrackerName = (String)pairs.getKey();
-			  // List of all map tasks that need to be assigned
-			  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
 			  // List of tasks for this taskTracker
 			  List<TaskInProgress> newTasks = 
 				  currTrackerTasks.get(taskTrackerName);
@@ -2583,12 +2620,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  int cost = 0;
 			  // next assigned task
 			  TaskInProgress nextTask = mapTasks[0];
+			  LOG.info("balAssign: virtual load for " + taskTrackerName + "is " + virtualLoad);
 			  if (virtualLoad == minVirtualLoad) {
 				  // assign a new task to this taskTracker
 				  newTasks.add(nextTask);
 				  currTrackerTasks.put(taskTrackerName, newTasks);
 				  mapsList.remove(0);
-				  
+				
 				  // increment the virtual load
 				  // 	is the task just assigned local?
 				  //	is the task just assigned nonlocal?
@@ -2610,7 +2648,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  }
 		  return Collections.max(currTrackerLoads.values());
       }
-      LOG.debug("Job is null, nothing to bal assign....");
+      LOG.info("Job is null, nothing to bal assign....");
       return -1;
   }
   
