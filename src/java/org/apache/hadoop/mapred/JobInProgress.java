@@ -1753,13 +1753,13 @@ public class JobInProgress {
     // Ugly!
     // Convert the trackerName to it's host name
     int indexOfColon = trackerName.indexOf(":");
-    LOG.info("indexOfColon is " + indexOfColon);
+    // LOG.info("indexOfColon is " + indexOfColon);
     String trackerHostName = (indexOfColon == -1) ? 
       trackerName : 
       trackerName.substring(0, indexOfColon);
-    LOG.info("trackerHostName is " + trackerHostName);
-    LOG.info("tracker_.length() is " + "tracker_".length());
-    LOG.info("should be returning: " + trackerHostName.substring(8));
+    // LOG.info("trackerHostName is " + trackerHostName);
+    // LOG.info("tracker_.length() is " + "tracker_".length());
+    // LOG.info("should be returning: " + trackerHostName.substring(8));
     return trackerHostName.substring("tracker_".length());
   }
     
@@ -2245,7 +2245,7 @@ public class JobInProgress {
     
     // remove and use next task assigned to this tasktracker
     
-    TaskInProgress nextTask = jobtracker.getNextTaskForTracker(taskTrackerName);
+    tip = jobtracker.getNextTaskForTracker(taskTrackerName);
     
     return tip;
   }

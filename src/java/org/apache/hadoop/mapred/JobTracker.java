@@ -2487,6 +2487,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * modifies original task list to reflect this change.
    */
   public TaskInProgress getNextTaskForTracker(String taskTrackerName) {
+	  LOG.info("getNextTaskForTracker: trackerTasks: " + trackerTasks.toString());
+	  LOG.info("getNextTaskForTracker: trackerLoads: " + trackerLoads.toString());
 	  synchronized (trackerTasks.get(taskTrackerName)) {
 		  return trackerTasks.get(taskTrackerName).remove(0);
 	  }
@@ -2535,7 +2537,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  LOG.info("Tried to assign tasks to a null job");
 			  break ;
 		  }
-		  if (currMaxLoad < leastMaxLoad) {
+		  // if we find a better max Load, or it is the first iteration, then assign tasks
+		  if (currMaxLoad < leastMaxLoad || i == 0) {
+			  LOG.info("currMaxLoad of " + currMaxLoad + "is less than prevMaxLoad of "
+					  + leastMaxLoad);
 			  // found an assignment with better leastMaxLoad
 			  // set trackerLoads and trackerTasks with values from 
 			  //	new assignment
@@ -2547,7 +2552,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  new HashMap<String,List<TaskInProgress>>(currTrackerTasks);
 			  LOG.info("Computed new task assignment with max load = "
 					  + leastMaxLoad);
-			  
+			  LOG.info("trackerTasks: " + trackerTasks.toString());
+			  LOG.info("trackerLoads is: " + trackerLoads.toString());
 		  }
 	  }
   }
@@ -2593,59 +2599,72 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     	  
 		  // List of all map tasks that need to be assigned
 		  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
+		  
 		  LOG.info("balAssign: num of maps is: " + mapsList.size());
     	  int minVirtualLoad = 0;
     	  if (!currTrackerLoads.values().isEmpty()) {
 			  minVirtualLoad = Collections.min(currTrackerLoads.values());
     	  }
     	  LOG.info("balAssign: minVirtualLoad is initially: " + minVirtualLoad);
-		  Iterator it = currTrackerLoads.entrySet().iterator();
 		  LOG.info("balAssign: " +
 		  		"Confirming that currTrackerLoads has size: " + currTrackerLoads.size());
-		  while	(it.hasNext()) {
-			  Map.Entry pairs = (Map.Entry)it.next();
-			  // virtual load for this tracker
-			  int virtualLoad = ((Integer) pairs.getValue()).intValue();
-			  // name of task tracker
-			  String taskTrackerName = (String)pairs.getKey();
-			  // List of tasks for this taskTracker
-			  List<TaskInProgress> newTasks = 
-				  currTrackerTasks.get(taskTrackerName);
-			  // TaskTrackerStatus for this taskTracker
-			  TaskTrackerStatus tts = 
-				  taskTrackers.get(taskTrackerName).getStatus();
-			  // locality level for this taskTracker
-			  int lvl = -1;
-			  // cost of assignment (used for virtual load)
-			  int cost = 0;
-			  // next assigned task
-			  TaskInProgress nextTask = mapTasks[0];
-			  LOG.info("balAssign: virtual load for " + taskTrackerName + "is " + virtualLoad);
-			  if (virtualLoad == minVirtualLoad) {
-				  // assign a new task to this taskTracker
-				  newTasks.add(nextTask);
-				  currTrackerTasks.put(taskTrackerName, newTasks);
-				  mapsList.remove(0);
-				
-				  // increment the virtual load
-				  // 	is the task just assigned local?
-				  //	is the task just assigned nonlocal?
-				  lvl = job.getLocalityLevel(nextTask, tts);
-				  cost = 1 + lvl;
-				  switch (lvl) {
-				  case 0:
-					  LOG.info("Assigning data-local task ");
-				  case 1:
-					  LOG.info("Assigning rack-local task ");
-				  default:
-					  LOG.info("Assigning remote task of cost " + lvl);
+		  // index of next task to be assigned (head of remaining) in mapTasks
+		  String ttName_debug = "hello";
+		  
+		  /* while there are unassigned maps,
+		   * loop over the task trackers and assign maps greedily
+		   */
+		  for (int i = 0; i < mapsList.size(); ++i) {
+			  Iterator it = currTrackerLoads.entrySet().iterator();
+			  while	(it.hasNext()) {
+				  Map.Entry pairs = (Map.Entry)it.next();
+				  // virtual load for this tracker
+				  int virtualLoad = ((Integer) pairs.getValue()).intValue();
+				  // name of task tracker
+				  String taskTrackerName = (String)pairs.getKey();
+				  // List of tasks for this taskTracker
+				  List<TaskInProgress> newTasks = 
+					  currTrackerTasks.get(taskTrackerName);
+				  // TaskTrackerStatus for this taskTracker
+				  TaskTrackerStatus tts = 
+					  taskTrackers.get(taskTrackerName).getStatus();
+				  // locality level for this taskTracker
+				  int lvl = -1;
+				  // cost of assignment (used for virtual load)
+				  int cost = 0;
+				  // index of and the next assigned task
+				  TaskInProgress nextTask = mapTasks[i];
+				  LOG.info("balAssign: virtual load for " + taskTrackerName + " is " + virtualLoad);
+				  if (virtualLoad == minVirtualLoad) {
+					  // assign a new task to this taskTracker
+					  newTasks.add(nextTask);
+					  currTrackerTasks.put(taskTrackerName, newTasks);
+					  //mapsList.remove(0);
+					
+					  // increment the virtual load
+					  // 	is the task just assigned local?
+					  //	is the task just assigned nonlocal?
+					  lvl = job.getLocalityLevel(nextTask, tts);
+					  cost = 1 + lvl;
+					  if (lvl == 0) {
+						  LOG.info("Assigning data-local task");
+					  }
+					  else if (lvl == 1) {
+						  LOG.info("Assigning rack-local task");
+					  }
+					  else {
+						  LOG.info("Assigning remote task of cost " + lvl);
+					  }
+					  
+					  virtualLoad += cost;
+					  currTrackerLoads.put(taskTrackerName, virtualLoad);
+					  minVirtualLoad = Collections.min(currTrackerLoads.values());
+					  ttName_debug = taskTrackerName;
 				  }
-				  
-				  virtualLoad += cost;
-				  currTrackerLoads.put(taskTrackerName, virtualLoad);
-				  minVirtualLoad = Collections.min(currTrackerLoads.values());
 			  }
 		  }
+		  LOG.info("Tasks for " + ttName_debug + ":" 
+				  + currTrackerTasks.get(ttName_debug).toString());
 		  return Collections.max(currTrackerLoads.values());
       }
       LOG.info("Job is null, nothing to bal assign....");
