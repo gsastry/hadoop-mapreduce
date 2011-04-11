@@ -2518,14 +2518,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  int numMapTasks_debug = job.desiredMaps();
 	  int numMapTasks = mapTasks.length;
 	  
-	  if (numMapTasks != numMapTasks_debug) {
+	  if (numMapTasks != numMapTasks_debug && LOG.isDebugEnabled()) {
 		  LOG.debug("Expected number of maps is different from actual num");
 	  }
 	  
 	  // remaining number of maps to assign
 	  TaskInProgress remainingMaps[] = Arrays.copyOf(mapTasks, numMapTasks);
-	  LOG.info("Number of remaining maps before scheduling is: "
-			   + remainingMaps.length);
+	  
+	  if (LOG.isDebugEnabled()) {
+		  LOG.debug ("Number of remaining maps before scheduling is: "
+				   + remainingMaps.length);
+	  }
 	  int leastMaxLoad = 0;
 	  int currMaxLoad = 0;
 	  for (int i = 0; i < numMapTasks; ++i) {
@@ -2533,14 +2536,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  resetCurrTrackerStructs();
 		  // maxCover (job, remainingMaps, i);
 		  currMaxLoad = balAssign(job, remainingMaps);
-		  if (currMaxLoad < 0) {
-			  LOG.info("Tried to assign tasks to a null job");
+		  if (currMaxLoad < 0 && LOG.isDebugEnabled()) {
+			  LOG.debug("Tried to assign tasks to a null job");
 			  break ;
 		  }
 		  // if we find a better max Load, or it is the first iteration, then assign tasks
 		  if (currMaxLoad < leastMaxLoad || i == 0) {
-			  LOG.info("currMaxLoad of " + currMaxLoad + "is less than prevMaxLoad of "
-					  + leastMaxLoad);
+			  if (LOG.isDebugEnabled()) {
+				  LOG.debug("currMaxLoad of " + currMaxLoad + "is less than prevMaxLoad of "
+						  + leastMaxLoad);
+			  }
 			  // found an assignment with better leastMaxLoad
 			  // set trackerLoads and trackerTasks with values from 
 			  //	new assignment
@@ -2550,10 +2555,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  trackerLoads = new HashMap<String, Integer>(currTrackerLoads);
 			  trackerTasks = 
 				  new HashMap<String,List<TaskInProgress>>(currTrackerTasks);
-			  LOG.info("Computed new task assignment with max load = "
-					  + leastMaxLoad);
-			  LOG.info("trackerTasks: " + trackerTasks.toString());
-			  LOG.info("trackerLoads is: " + trackerLoads.toString());
+			  if (LOG.isDebugEnabled()) {
+				  LOG.debug("Computed new task assignment with max load = "
+						  + leastMaxLoad);
+				  LOG.debug("trackerTasks: " + trackerTasks.toString());
+				  LOG.debug("trackerLoads is: " + trackerLoads.toString());
+			  }
 		  }
 	  }
   }
@@ -2600,14 +2607,19 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  // List of all map tasks that need to be assigned
 		  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
 		  
-		  LOG.info("balAssign: num of maps is: " + mapsList.size());
+		  if (LOG.isDebugEnabled()) {
+			  LOG.debug("balAssign: num of maps is: " + mapsList.size());
+		  }
     	  int minVirtualLoad = 0;
     	  if (!currTrackerLoads.values().isEmpty()) {
 			  minVirtualLoad = Collections.min(currTrackerLoads.values());
     	  }
-    	  LOG.info("balAssign: minVirtualLoad is initially: " + minVirtualLoad);
-		  LOG.info("balAssign: " +
-		  		"Confirming that currTrackerLoads has size: " + currTrackerLoads.size());
+    	  
+    	  if (LOG.isDebugEnabled()) {
+	    	  LOG.debug("balAssign: minVirtualLoad is initially: " + minVirtualLoad);
+			  LOG.debug("balAssign: " +
+			  		"Confirming that currTrackerLoads has size: " + currTrackerLoads.size());
+    	  }
 		  // index of next task to be assigned (head of remaining) in mapTasks
 		  String ttName_debug = "hello";
 		  
@@ -2634,7 +2646,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  int cost = 0;
 				  // index of and the next assigned task
 				  TaskInProgress nextTask = mapTasks[i];
-				  LOG.info("balAssign: virtual load for " + taskTrackerName + " is " + virtualLoad);
+				  //LOG.debug("balAssign: virtual load for " + taskTrackerName + " is " + virtualLoad);
 				  if (virtualLoad == minVirtualLoad) {
 					  // assign a new task to this taskTracker
 					  newTasks.add(nextTask);
@@ -2646,14 +2658,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					  //	is the task just assigned nonlocal?
 					  lvl = job.getLocalityLevel(nextTask, tts);
 					  cost = 1 + lvl;
-					  if (lvl == 0) {
-						  LOG.info("Assigning data-local task");
-					  }
-					  else if (lvl == 1) {
-						  LOG.info("Assigning rack-local task");
-					  }
-					  else {
-						  LOG.info("Assigning remote task of cost " + lvl);
+					  if (LOG.isDebugEnabled()) {
+						  if (lvl == 0) {
+							  LOG.debug("Assigning data-local task");
+						  }
+						  else if (lvl == 1) {
+							  LOG.debug("Assigning rack-local task");
+						  }
+						  else {
+							  LOG.debug("Assigning remote task of cost " + lvl);
+						  }
 					  }
 					  
 					  virtualLoad += cost;
@@ -2663,8 +2677,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  }
 			  }
 		  }
-		  LOG.info("Tasks for " + ttName_debug + ":" 
-				  + currTrackerTasks.get(ttName_debug).toString());
+		  // LOG.debug("Tasks for " + ttName_debug + ":" 
+				  // + currTrackerTasks.get(ttName_debug).toString());
 		  return Collections.max(currTrackerLoads.values());
       }
       LOG.info("Job is null, nothing to bal assign....");
