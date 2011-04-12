@@ -1,6 +1,6 @@
 package org.apache.hadoop.mapred;
 
-import java.util.List;
+import java.util.*;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -54,8 +54,13 @@ public class FlowNetwork {
 		
 	}
 	
-	private void addVertex(String vertex) {
-		
+	public void addVertex(String vertex) {
+		adjMatrix.put(vertex, new ArrayList<Edge>());
+	}
+	
+	public void getEdges(String u, String v, int w) {
+		Edge fwdEdge = new Edge(u, v, w);
+		Edge revEdge = new Edge(v, u, 0);
 	}
 
 }

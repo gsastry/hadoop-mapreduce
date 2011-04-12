@@ -2487,9 +2487,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * modifies original task list to reflect this change.
    */
   public TaskInProgress getNextTaskForTracker(String taskTrackerName) {
-	  LOG.info("getNextTaskForTracker: trackerTasks: " + trackerTasks.toString());
-	  LOG.info("getNextTaskForTracker: trackerLoads: " + trackerLoads.toString());
+	  if (LOG.isDebugEnabled()) {
+		  LOG.debug("getNextTaskForTracker: trackerTasks: " + trackerTasks.toString());
+		  LOG.debug("getNextTaskForTracker: trackerLoads: " + trackerLoads.toString());
+	  }
 	  synchronized (trackerTasks.get(taskTrackerName)) {
+		  if (trackerTasks.get(taskTrackerName).size() == 0) {
+			  return null;
+		  }
 		  return trackerTasks.get(taskTrackerName).remove(0);
 	  }
   }
@@ -2626,7 +2631,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  /* while there are unassigned maps,
 		   * loop over the task trackers and assign maps greedily
 		   */
-		  for (int i = 0; i < mapsList.size(); ++i) {
+		  int i = 0;
+		  while (i < mapsList.size()) {
 			  Iterator it = currTrackerLoads.entrySet().iterator();
 			  while	(it.hasNext()) {
 				  Map.Entry pairs = (Map.Entry)it.next();
@@ -2674,6 +2680,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					  currTrackerLoads.put(taskTrackerName, virtualLoad);
 					  minVirtualLoad = Collections.min(currTrackerLoads.values());
 					  ttName_debug = taskTrackerName;
+					  ++i;
 				  }
 			  }
 		  }
