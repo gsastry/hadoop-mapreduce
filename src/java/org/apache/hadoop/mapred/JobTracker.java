@@ -1249,6 +1249,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   Map<String,List<TaskInProgress>> currTrackerTasks = 
 	  new HashMap<String, List<TaskInProgress>>();
   
+  Map<String,List<TaskInProgress>> partialTrackerTasks = 
+	  new HashMap<String, List<TaskInProgress>>();
+  Map<String,Integer> partialTrackerLoads =
+	  new HashMap<String, Integer>();
+  
   // taskInProgress |--> List<String>
   // Maps a TIP to a list of the taskTrackers that can access it's data
   // locally
@@ -2433,6 +2438,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  trackerTasks.clear();
 	  currTrackerLoads.clear();
 	  currTrackerTasks.clear();
+	  partialTrackerTasks.clear();
 	  Collection<TaskTrackerStatus> ttss = activeTaskTrackers();
 	  
 	  if (ttss.isEmpty()) {
@@ -2455,6 +2461,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  new HashMap<String,Integer>(trackerLoads);
 	  currTrackerTasks = 
 		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
+	  partialTrackerTasks =
+		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
+	  partialTrackerLoads =
+		  new HashMap<String, Integer>(trackerLoads);
 	  LOG.info("Tracker structs initialized");
 	  LOG.info("trackerLoads: " + trackerLoads);
 	  LOG.info("trackerTasks: " + trackerTasks);
@@ -2475,6 +2485,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  String taskTrackerName = (String)pairs.getKey();
 		  currTrackerTasks.put(taskTrackerName, new ArrayList<TaskInProgress>());
 	  }
+	  
+	  currTrackerLoads.clear();
+	  currTrackerTasks.clear();
+	  currTrackerLoads = 
+		  new HashMap<String,Integer>(partialTrackerLoads);
+	  currTrackerTasks = 
+		  new HashMap<String, List<TaskInProgress>>(partialTrackerTasks);
+	  
   }
   
   // maybe don't need...
@@ -2491,12 +2509,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  LOG.debug("getNextTaskForTracker: trackerTasks: " + trackerTasks.toString());
 		  LOG.debug("getNextTaskForTracker: trackerLoads: " + trackerLoads.toString());
 	  }
-	  synchronized (trackerTasks.get(taskTrackerName)) {
-		  if (trackerTasks.get(taskTrackerName).size() == 0) {
-			  return null;
+	  if (taskTrackerName != null) {
+		  synchronized (trackerTasks.get(taskTrackerName)) {
+			  if (trackerTasks.get(taskTrackerName).size() == 0) {
+				  return null;
+			  }
+			  return trackerTasks.get(taskTrackerName).remove(0);
 		  }
-		  return trackerTasks.get(taskTrackerName).remove(0);
 	  }
+	  return null;
   }
   
   /* schedule tasks for all jobs. Right now this ASSUMES THAT THERE IS ONLY
@@ -2536,10 +2557,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  }
 	  int leastMaxLoad = 0;
 	  int currMaxLoad = 0;
-	  for (int i = 0; i < numMapTasks; ++i) {
-		  // clear previous task assignments
-		  resetCurrTrackerStructs();
+	  for (int i = 1; i < numMapTasks; ++i) {
 		  // maxCover (job, remainingMaps, i);
+		  resetCurrTrackerStructs();
+		  
+		  
+		  
+		  // if maxCover returns a full assignment, 
+		  // 	we are done
+		  
+		  
 		  currMaxLoad = balAssign(job, remainingMaps);
 		  if (currMaxLoad < 0 && LOG.isDebugEnabled()) {
 			  LOG.debug("Tried to assign tasks to a null job");
@@ -2577,7 +2604,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   public void maxCover(JobInProgress job, 
 		  			   TaskInProgress[] mapTasks,
 		  			   int numTasksToAssign) {
-	  Map<TaskInProgress,String[]> localityGraph = job.getLocalityGraph();
+	  Map<TaskInProgress,List<String>> localityGraph = job.getLocalityGraph();
 	  
 	  /* initialize our String (TaskInProgress) --> String[] (split locations)
 	   * localityGraph for input to the network flow algorithm
@@ -2585,12 +2612,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  Map<String,String[]> localityGraphSplits =
 		  new HashMap<String,String[]>();
 	  
+		  /*
 	  Iterator itr = localityGraph.entrySet().iterator();
 	  while (itr.hasNext()) {
 		  Map.Entry pairs = (Map.Entry)itr.next();
 		  localityGraphSplits.put(pairs.getKey().toString(), 
-				  				  (String[])pairs.getValue());
+				  				  (String)pairs.getValue());
 	  }
+	  */
   }
   
   /*
@@ -2634,7 +2663,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  int i = 0;
 		  while (i < mapsList.size()) {
 			  Iterator it = currTrackerLoads.entrySet().iterator();
-			  while	(it.hasNext()) {
+			  while	(it.hasNext() && i < mapsList.size()) {
 				  Map.Entry pairs = (Map.Entry)it.next();
 				  // virtual load for this tracker
 				  int virtualLoad = ((Integer) pairs.getValue()).intValue();

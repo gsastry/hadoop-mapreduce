@@ -156,7 +156,7 @@ public class JobInProgress {
   
   // Locality graph for the network
   // TaskInProgress --> array of hostnames that host its data
-  Map<TaskInProgress, String[]> localityGraph;
+  Map<TaskInProgress, List<String>> localityGraph;
 
   // NetworkTopology Node to the set of TIPs
   Map<Node, List<TaskInProgress>> nonRunningMapCache;
@@ -518,6 +518,9 @@ public class JobInProgress {
       for(String host: splitLocations) {
         Node node = jobtracker.resolveAndAddToTopology(host);
         LOG.info("tip:" + maps[i].getTIPId() + " has split on node:" + node);
+        List<String> graph_splits = localityGraph.get(maps[i]);
+        graph_splits.add(node.toString());
+        localityGraph.put(maps[i], graph_splits);
         for (int j = 0; j < maxLevel; j++) {
           List<TaskInProgress> hostMaps = cache.get(node);
           if (hostMaps == null) {
@@ -655,15 +658,13 @@ public class JobInProgress {
      * Now the map tasks are created, so let the JobTracker
      * assign all the tasks to taskTrackers.
      */
-    jobtracker.scheduleTasksAllJobs(maps);
     
     if (numMapTasks > 0) { 
       nonRunningMapCache = createCache(taskSplitMetaInfo,
           maxLevel);
-      // get locality graph at beginning before nonRunningMapCache is modified
-      // localityGraph = 
-    	 // new HashMap<Node, List<TaskInProgress>>(nonRunningMapCache);
     }
+    jobtracker.scheduleTasksAllJobs(maps);
+    LOG.info("Locality graph: " + getLocalityGraph());
         
     // set the launch time
     this.launchTime = JobTracker.getClock().getTime();
@@ -1314,7 +1315,7 @@ public class JobInProgress {
 		  getNewMapTask(tts, clusterSize, numUniqueHosts);
 	  
 	  if (t == null) {
-		  LOG.info("Retrieved a null task from preassigned tasks");
+		  //LOG.info("Retrieved a null task from preassigned tasks");
 		  return null;
 	  }
 	  
@@ -3807,15 +3808,16 @@ public class JobInProgress {
   }
 
   // intialize locality graph with split locatations for each map task
+  /*
   public void initLocalityGraph() {
 	  for (TaskInProgress tip : maps) {
 		  localityGraph.put(tip, tip.getSplitLocations());
 		 
 	  }
-  }
+  } */
   
   // return the localityGraph
-  public Map<TaskInProgress, String[]> getLocalityGraph() {
+  public Map<TaskInProgress, List<String>> getLocalityGraph() {
 	  return localityGraph;
   }
   public String getJobSubmitHostAddress() {
