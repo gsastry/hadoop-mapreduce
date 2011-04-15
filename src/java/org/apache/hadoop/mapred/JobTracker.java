@@ -2522,6 +2522,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   /* schedule tasks for all jobs. Right now this ASSUMES THAT THERE IS ONLY
    * one job, and thus breaks after scheduling tasks for the one job.
+   * list of maps is randomized before doing this.
    */
   public void scheduleTasksAllJobs (TaskInProgress[] maps) {
 	  for(JobInProgress job : jobs.values()){
@@ -2558,7 +2559,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  int leastMaxLoad = 0;
 	  int currMaxLoad = 0;
 	  for (int i = 1; i < numMapTasks; ++i) {
-		  // maxCover (job, remainingMaps, i);
+		  //remainingMaps = maxCover (job, remainingMaps, i);
 		  resetCurrTrackerStructs();
 		  
 		  
@@ -2640,6 +2641,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     	  
 		  // List of all map tasks that need to be assigned
 		  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
+		  
+		  // shuffle the map tasks randomly
+		  Collections.shuffle(mapsList);
 		  
 		  if (LOG.isDebugEnabled()) {
 			  LOG.debug("balAssign: num of maps is: " + mapsList.size());

@@ -660,8 +660,8 @@ public class JobInProgress {
      */
     
     if (numMapTasks > 0) { 
-      nonRunningMapCache = createCache(taskSplitMetaInfo,
-          maxLevel);
+    	initLocalityGraph();
+    	nonRunningMapCache = createCache(taskSplitMetaInfo, maxLevel);
     }
     jobtracker.scheduleTasksAllJobs(maps);
     LOG.info("Locality graph: " + getLocalityGraph());
@@ -3807,14 +3807,13 @@ public class JobInProgress {
         + keysFile.toUri().getPath());
   }
 
-  // intialize locality graph with split locatations for each map task
-  /*
+  
   public void initLocalityGraph() {
 	  for (TaskInProgress tip : maps) {
-		  localityGraph.put(tip, tip.getSplitLocations());
-		 
+		  List<String> servers = new ArrayList<String>();
+		  localityGraph.put(tip, servers);
 	  }
-  } */
+  } 
   
   // return the localityGraph
   public Map<TaskInProgress, List<String>> getLocalityGraph() {
