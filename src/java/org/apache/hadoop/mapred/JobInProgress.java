@@ -155,8 +155,9 @@ public class JobInProgress {
   JobHistory jobHistory;
   
   // Locality graph for the network
-  // TaskInProgress --> array of hostnames that host its data
-  Map<TaskInProgress, List<String>> localityGraph;
+  // Index ofTaskInProgress --> array of hostnames that host its data
+  Map<Integer, List<String>> localityGraph 
+  	= new HashMap<Integer,List<String>>();
 
   // NetworkTopology Node to the set of TIPs
   Map<Node, List<TaskInProgress>> nonRunningMapCache;
@@ -514,13 +515,14 @@ public class JobInProgress {
         nonLocalMaps.add(maps[i]);
         continue;
       }
+      
+      List<String> servers = new ArrayList<String>();
 
       for(String host: splitLocations) {
         Node node = jobtracker.resolveAndAddToTopology(host);
         LOG.info("tip:" + maps[i].getTIPId() + " has split on node:" + node);
-        List<String> graph_splits = localityGraph.get(maps[i]);
-        graph_splits.add(node.toString());
-        localityGraph.put(maps[i], graph_splits);
+        servers.add(node.toString());
+	    localityGraph.put(i, servers);
         for (int j = 0; j < maxLevel; j++) {
           List<TaskInProgress> hostMaps = cache.get(node);
           if (hostMaps == null) {
@@ -660,7 +662,7 @@ public class JobInProgress {
      */
     
     if (numMapTasks > 0) { 
-    	initLocalityGraph();
+    	// initLocalityGraph();
     	nonRunningMapCache = createCache(taskSplitMetaInfo, maxLevel);
     }
     jobtracker.scheduleTasksAllJobs(maps);
@@ -2241,9 +2243,6 @@ public class JobInProgress {
       return tip; //see if a different TIP might work better. 
     }
     
-    // get list of tasks assigned to this tasktracker
-    List<TaskInProgress> tasks = jobtracker.getTrackerTasks(taskTrackerName);
-    
     // remove and use next task assigned to this tasktracker
     
     tip = jobtracker.getNextTaskForTracker(taskTrackerName);
@@ -3808,15 +3807,8 @@ public class JobInProgress {
   }
 
   
-  public void initLocalityGraph() {
-	  for (TaskInProgress tip : maps) {
-		  List<String> servers = new ArrayList<String>();
-		  localityGraph.put(tip, servers);
-	  }
-  } 
-  
   // return the localityGraph
-  public Map<TaskInProgress, List<String>> getLocalityGraph() {
+  public Map<Integer, List<String>> getLocalityGraph() {
 	  return localityGraph;
   }
   public String getJobSubmitHostAddress() {
