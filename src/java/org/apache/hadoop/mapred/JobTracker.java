@@ -1236,6 +1236,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //     the necessary files.
   //
   
+  List<TaskInProgress> mapsToAssign;
+  
   Comparator<TrackerTasks> comparator = new TrackerTasksComparator();
   
   PriorityQueue<TrackerTasks> taskAssignments 
@@ -1243,6 +1245,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   PriorityQueue<TrackerTasks> currTaskAssignments 
   	= new PriorityQueue<TrackerTasks>();
+  
+  Map<Integer,List<Integer>> partialAssignment;
+  	
   
   // Trackers and their virtual loads. (trackerID -> virtual load)
   Map<String, Integer> trackerLoads = 
@@ -2435,14 +2440,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   }
   
   
-  private void initTrackerStructs() {
-	  // trackerLoads.clear();
-	  // trackerTasks.clear();
-	  // currTrackerLoads.clear();
-	 //  currTrackerTasks.clear();
-	 //  partialTrackerTasks.clear();
+  private void initTrackerStructs(TaskInProgress[] maps, int numMaps) {
 	  Collection<TaskTrackerStatus> ttss = activeTaskTrackers();
+	  
+	  // clear taskAssignments and partialAssignment
 	  taskAssignments.clear();
+	  
+	  partialAssignment = new HashMap<Integer,List<Integer>>(ttss.size());
+	  
+	  mapsToAssign = new ArrayList<TaskInProgress>(numMaps);
 	  
 	  if (ttss.isEmpty()) {
 		  LOG.info("Active task trackers returned an empty collection");
@@ -2452,6 +2458,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  LOG.info("Confirmed that size of active task trackers coll is 0");
 	  }
 	  
+	  int i = 0;
 	  for (Iterator it = ttss.iterator(); it.hasNext(); ) {
 		  TaskTrackerStatus tts = (TaskTrackerStatus) it.next();
 		  String taskTrackerName = tts.trackerName;
@@ -2462,75 +2469,21 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  taskAssignments.add(new TrackerTasks(taskTrackerName,
 				  							   new ArrayList<TaskInProgress>(),
 				  							   0));
+		  partialAssignment.put(i, new ArrayList<Integer>());
+		  i++;
 	  }
 	  
-	  /* currTrackerLoads = 
-		  new HashMap<String,Integer>(trackerLoads);
-	  currTrackerTasks = 
-		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
-	  partialTrackerTasks =
-		  new HashMap<String, List<TaskInProgress>>(trackerTasks);
-	  partialTrackerLoads =
-		  new HashMap<String, Integer>(trackerLoads);
-	  LOG.info("Tracker structs initialized");
-	  LOG.info("trackerLoads: " + trackerLoads);
-	  LOG.info("trackerTasks: " + trackerTasks);
-	  LOG.info("currTrackerLoads: " + currTrackerLoads);
-	  LOG.info("currTrackerTasks: " + currTrackerTasks);
-	  LOG.info("taskAssignments: " + taskAssignments);
-	  */
+	  for (i = 0; i < numMaps; i++) {
+		  mapsToAssign.add(maps[i]);
+	  }
   }
   
   private void resetCurrTrackerStructs() {
-	  /*
-	  Iterator it = currTrackerLoads.entrySet().iterator();
-	  while (it.hasNext()) {
-		  Map.Entry pairs = (Map.Entry)it.next();
-		  String taskTrackerName = (String)pairs.getKey();
-		  currTrackerLoads.put(taskTrackerName, 0);
-	  }
-	  it = currTrackerTasks.entrySet().iterator();
-	  while (it.hasNext()) {
-		  Map.Entry pairs = (Map.Entry)it.next();
-		  String taskTrackerName = (String)pairs.getKey();
-		  currTrackerTasks.put(taskTrackerName, new ArrayList<TaskInProgress>());
-	  } */
-	  
-	  ///////////////////////////////////////////////////////
 	  for (TrackerTasks trackerTasks : taskAssignments) {
 		  trackerTasks.clearTasks();
 		  trackerTasks.setVirtualLoad(0);
-	  }
-	  ///////////////////////////////////////////////////////
-	  
-	  /*
-	  currTrackerLoads.clear();
-	  currTrackerTasks.clear();
-	  currTrackerLoads = 
-		  new HashMap<String,Integer>(partialTrackerLoads);
-	  currTrackerTasks = 
-		  new HashMap<String, List<TaskInProgress>>(partialTrackerTasks);
-		  */
-	  
+	  } 
   }
-  
-  /*
-   * returns the head of the task list assigned to the given taskTrackerName.
-   * modifies original task list to reflect this change.
-   
-  public TaskInProgress getNextTaskForTracker(String taskTrackerName) {
-	  if (taskTrackerName != null
-			  && trackerTasks.get(taskTrackerName) != null) {
-		  synchronized(trackerTasks.get(taskTrackerName)) {
-			  if (trackerTasks.get(taskTrackerName).size() > 0) {
-				  TaskInProgress tip = trackerTasks.get(taskTrackerName).remove(0);
-				  LOG.info("Tracker " + taskTrackerName + "just got task " + tip);
-			  }
-		  }
-	  }
-	  
-	  return null;
-  } */
   
   public TaskInProgress getNextTaskForTracker(String taskTrackerName) {
 	  synchronized (trackerTasks) {
@@ -2550,10 +2503,45 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * one job, and thus breaks after scheduling tasks for the one job.
    * list of maps is randomized before doing this.
    */
-  public void scheduleTasksAllJobs (TaskInProgress[] maps) {
+  public void scheduleTasksAllJobs (TaskInProgress[] maps, int numMaps) {
+	  int numServers = taskTrackers.size();
+	  String[] servers = new String[numServers];
+	  Map<String, List<String>> nodeToTrackerName = new HashMap<String,List<String>>();
+	  
+	  int i = 0;
+	  for (Map.Entry<String, TaskTracker> entry : taskTrackers.entrySet()) {
+		  servers[i] = entry.getKey();
+		  i++;
+	  }
+	  
+	  for(Map.Entry<String, Node> entry : hostnameToNodeMap.entrySet()) {
+		  Set<TaskTracker> trackers = hostnameToTaskTracker.get(entry.getKey());
+		  List<String> trackerNames = new ArrayList<String>(trackers.size());
+		  
+		  for (TaskTracker tracker : trackers) {
+			  trackerNames.add(tracker.getTrackerName());
+		  }
+		  nodeToTrackerName.put(entry.getValue().toString(), trackerNames);
+	  }
+	  
+	  LOG.info("nodeToTrackerName: " + nodeToTrackerName);
+	  LOG.info("servers before anything is: " + servers);
+	  
 	  for(JobInProgress job : jobs.values()){
-		  initTrackerStructs();
-		  scheduleTasks(job, maps);
+		  Map<Integer,List<String>> localityGraph = job.getLocalityGraph();
+		  for (i = 0; i < numMaps; i++) {
+			  List<String> nodes = localityGraph.get(i);
+			  List<String> trackers = new ArrayList<String>(nodes.size());
+			  for (String node : nodes) {
+				  List<String> trackersForNode = nodeToTrackerName.get(node);
+				  for (String tracker : trackersForNode) {
+					  trackers.addAll(trackersForNode);
+				  }
+			  }
+			  localityGraph.put(i, trackers);
+		  }
+		  initTrackerStructs(maps, numMaps);
+		  scheduleTasks(job, maps, servers, numServers, numMaps, localityGraph);
 		  break ;
 	  }
   }
@@ -2567,7 +2555,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
    * trackerLoads contains taskTrackers and their virtual loads;
    * trackerTasks contains taskTrackers and their computed task assignments
    */
-  public void scheduleTasks(JobInProgress job, TaskInProgress[] mapTasks) {
+  public void scheduleTasks(JobInProgress job, 
+		  					TaskInProgress[] mapTasks, 
+		  					String[] servers,
+		  					int numServers,
+		  					int numMaps,
+		  					Map<Integer,List<String>> localityGraph) {
 	  int numMapTasks_debug = job.desiredMaps();
 	  int numMapTasks = mapTasks.length;
 	  
@@ -2575,24 +2568,37 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  LOG.debug("Expected number of maps is different from actual num");
 	  }
 	  
-	  // remaining number of maps to assign
-	  TaskInProgress remainingMaps[] = Arrays.copyOf(mapTasks, numMapTasks);
-	  
-	  if (LOG.isDebugEnabled()) {
-		  LOG.debug ("Number of remaining maps before scheduling is: "
-				   + remainingMaps.length);
-	  }
 	  int leastMaxLoad = 0;
 	  int currMaxLoad = 0;
-	  for (int i = 1; i < numMapTasks; ++i) {
-		  //remainingMaps = maxCover (job, remainingMaps, i);
-		  resetCurrTrackerStructs();
+	  int maxFlow = 0;
+	  for (int i = 1; i < numMapTasks + 1; ++i) {
+		  mapsToAssign.clear();
+		  for (int k = 0; k < numMaps; k++) {
+			  mapsToAssign.add(mapTasks[k]);
+		  }
+		  LOG.info("Before iteration " + i + "trackerTasks is: " + trackerTasks);
+		  LOG.info("Before iteration " + i + "mapsToAssign is " + mapsToAssign);
+		  LOG.info("Before iteration " + i + "taskAssignments is " + taskAssignments);
+		  maxFlow 
+		  	= maxCover (job, 
+		  			mapTasks, 
+		  			servers, 
+		  			partialAssignment, 
+		  			i, 
+		  			maxFlow, 
+		  			localityGraph);
+		  // resetCurrTrackerStructs();
+		  
+		  LOG.info("After iteration " + i + "mapsToAssign is " + mapsToAssign);
+		  LOG.info("Before iteration " + i + "taskAssignments is " + taskAssignments);
 		  
 		  // if maxCover returns a full assignment, 
 		  // 	we are done
 		  
 		  
-		  currMaxLoad = balAssign(job, remainingMaps);
+		  currMaxLoad 
+		  	= balAssign(job, 
+		  			mapsToAssign.toArray(new TaskInProgress[mapsToAssign.size()]));
 		  if (currMaxLoad < 0 && LOG.isDebugEnabled()) {
 			  LOG.debug("Tried to assign tasks to a null job");
 			  break ;
@@ -2605,16 +2611,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  // set trackerLoads and trackerTasks with values from 
 			  //	new assignment
 			  leastMaxLoad = currMaxLoad;
-			  trackerLoads.clear();
-			  // trackerTasks.clear();
-			  trackerLoads = new HashMap<String, Integer>(currTrackerLoads);
-			  // trackerTasks = 
-			//	  new HashMap<String,List<TaskInProgress>>(currTrackerTasks);
-			  Iterator itr = taskAssignments.iterator();
-			  while (itr.hasNext()) {
-				  TrackerTasks nxt = (TrackerTasks)itr.next();
-				  trackerTasks.put(nxt.getTrackerName(), nxt.getTasks());
-			  }
+			  fillTrackerTasks();
 			  LOG.info("trackerTasks: " + trackerTasks);
 			  if (LOG.isDebugEnabled()) {
 				  LOG.debug("Computed new task assignment with max load = "
@@ -2623,6 +2620,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				  LOG.debug("trackerLoads is: " + trackerLoads.toString());
 			  }
 		  }
+	  }
+  }
+  
+  public void fillTrackerTasks() {
+	  Iterator itr = taskAssignments.iterator();
+	  while (itr.hasNext()) {
+		  TrackerTasks nxt = (TrackerTasks)itr.next();
+		  trackerTasks.put(nxt.getTrackerName(), nxt.getTasks());
 	  }
   }
   
@@ -2635,7 +2640,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  			   String[] servers,
 		  			   Map<Integer,List<Integer>> partial,
 		  			   int tao,
-		  			   int maxFlow) {
+		  			   int maxFlow,
+		  			   Map<Integer,List<String>> localityGraph) {
 	  int numTasks = Arrays.asList(mapTasks).size();
 	  int numServers = activeTaskTrackers().size();
 	  int numVertices = numTasks + numServers + 2;
@@ -2644,9 +2650,21 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  int sink = 1;
 	  int source = 0;
 	  
-	  Map<Integer,List<String>> localityGraph = job.getLocalityGraph();
 	  Map<Integer,List<Integer>> placementGraph
 	  	= new HashMap<Integer,List<Integer>>(localityGraph.size());
+	  
+	  LOG.info("localityGraph: " + localityGraph);
+	  LOG.info("mapTasks ");
+	  for (TaskInProgress tip : mapTasks) {
+		  LOG.info(tip);
+	  }
+	  LOG.info("servers: ");
+	  for (String server : servers) {
+		  LOG.info(server);
+	  }
+	  LOG.info("numMaps: " + numTasks);
+	  LOG.info("numServers: " + numServers);
+	  LOG.info("tao: " + tao);
 	  
 	  /* initialize placementGraph */
 	  for (int i = 0; i < numTasks; i++) {
@@ -2656,17 +2674,29 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  for (String server : splits) {
 			  for (int j = 0; j < numServers; j++) {
 				  if (splitLocs.size() == 3) break ;
+				  LOG.info("servers[j]: " + servers[j]);
+				  LOG.info("server to match: " + server);
 				  if (servers[j].equals(server)) {
 					  splitLocs.add(j);
+					  LOG.info("added server" + servers[j] + "to placement graph");
 				  }
 			  }
 		  }
 		  placementGraph.put(i, splitLocs);
 	  }
 	  
+	  LOG.info("placementGraph: " + placementGraph);
+	  LOG.info("partialAssignment: " + partialAssignment);
+	
 	  capacity = placementToCapacity(placementGraph, numServers, numTasks, tao);
-	  flow = partialToFlow(partial, numServers, numTasks);
+	  LOG.info("capacity before partialToFlow: ");
+	  printFlow(capacity, numVertices);
+	  flow = partialToFlow(partialAssignment, numServers, numTasks);
 	  capacity = flowToCapacityInput(flow, capacity, numVertices);
+	  LOG.info("capacity before: ");
+	  printFlow(capacity, numVertices);
+	  LOG.info("flow before: ");
+	  printFlow(flow, numVertices);
 	  
 	  FlowNetwork fn = new FlowNetwork(numVertices,
 			  						   capacity,
@@ -2674,9 +2704,48 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  						   1,
 			  						   flow,
 			  						   maxFlow);
+	  LOG.info("capacity after: ");
+	  printFlow(capacity, numVertices);
+	  LOG.info("flow after: ");
+	  printFlow(fn.getFlowMatrix(), numVertices);
+	  partialAssignment = flowToPartial(fn.getFlowMatrix(), numTasks, numServers);
+	  LOG.info("partialAssignment after: " + partialAssignment);
 	  
-			  						 
+	  taskAssignments.clear();
+	  
+	  List<Integer> assignedMaps = new ArrayList<Integer>(tao);
+	  
+	  for (Map.Entry<Integer,List<Integer>> entry : partialAssignment.entrySet()) {
+		  List<TaskInProgress> assignedTasks = new ArrayList<TaskInProgress>();
+		  String server = servers[entry.getKey()];
+		  for (int tipIndex : entry.getValue()) {
+			  assignedTasks.add(mapTasks[tipIndex]);
+		  }
+		  TrackerTasks assignment = new TrackerTasks(server, 
+				  									 assignedTasks,
+				  									 assignedTasks.size());
+		  LOG.info("new assignment in maxCover is: " + assignment);
+		  taskAssignments.add(assignment);
+		  assignedMaps.addAll(entry.getValue());
+		  LOG.info("assignedMaps is: " + assignedMaps);
+		  mapsToAssign.removeAll(assignedTasks);
+	  }
+	  
+	  // fillTrackerTasks();
+	  
+	  
+	  LOG.info("mapsToAssign before removal: " + mapsToAssign);
+	  LOG.info("mapsToAssign after removal: " + mapsToAssign);
+	  
 	  return maxFlow;
+  }
+  
+  public void printFlow(int[][] flow, int numVertices) {
+	  for (int i = 0; i < numVertices; i++) {
+		  for (int j = 0; j < numVertices; j++) {
+			  LOG.info("flow[" + i + "][" + j + "]: " + flow[i][j]);
+		  }
+	  }
   }
 		  							 
 	// converts a flow to a augmenting capacity input for the next run of maxFlow
@@ -2693,7 +2762,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	}
 	
 	// convert placement graph to capacity
-	public int[][] placementToCapacity(Map<Integer,List<Integer>> partial,
+	public int[][] placementToCapacity(Map<Integer,List<Integer>> placementGraph,
 								 int numServers,
 								 int numTasks,
 								 int tao) {
@@ -2703,15 +2772,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		int sink = 1;
 		int offset = 2 + numTasks;
 		
+		LOG.info("Entering placementToCapacity");
+		LOG.info("tao: " + tao);
 		
-		Iterator<Map.Entry<Integer,List<Integer>>> it 
-			= partial.entrySet().iterator();
 		int i = 0;
 		
-		while (it.hasNext()) {
-			List<Integer> servers = partial.get(i);
+		for (Map.Entry<Integer,List<Integer>> entry : placementGraph.entrySet()) {
+			List<Integer> servers = placementGraph.get(i);
+			LOG.info("On iteration " + i);
+			LOG.info("servers is " + servers);
 			if (servers != null) {
 				for (int serverIndex : servers) {
+					LOG.info("inner loop iteration " + serverIndex);
 					int task = i + 2;
 					int server = serverIndex + offset;
 					capacity[source][task] = 1;
@@ -2722,6 +2794,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			i++;
 		}
 		
+		LOG.info("Exiting placementToCapacity");
 		return capacity;
 	}
 	
@@ -2736,17 +2809,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		int offset = 2;
 		int[][] flow = new int[size][size];
 		
+
+		LOG.info("Entering partialToFlow");
 		
-		Iterator<Map.Entry<Integer,List<Integer>>> it 
-			= partial.entrySet().iterator();
 		int i = 0;
 		
-		while (it.hasNext()) {
+		for (Map.Entry<Integer,List<Integer>> entry : partial.entrySet()) {
 			List<Integer> assignedTasks = partial.get(i);
 			if (assignedTasks != null) {
 				for (int taskIndex : assignedTasks) {
 					int task = taskIndex + offset;
-					int server = task + i + 1;
+					int server = i + numTasks + offset;
 					flow[source][task] = 1;
 					flow[task][server] = 1;
 					flow[server][sink] += 1;
@@ -2754,6 +2827,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			}
 			i++;
 		}
+		
+		LOG.info("Exiting partialToFlow");
 		
 		return flow;
 	}
@@ -2763,36 +2838,51 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 													 int numServers) {
 		Map<Integer,List<Integer>> partial = 
 			new HashMap<Integer,List<Integer>>();
-		int numVertices = numTasks + numServers;
+		int numVertices = numTasks + numServers + 2;
 		int offset = 2;
 		int source = 0;
 		int sink = 1;
 		
-		/* initialize partial assignment with indices of servers */
+		LOG.info("Entering flowToPartial");
+		
+		//  initialize partial assignment with indices of servers 
 		for (int i = 0; i < numServers; i++) {
 			List<Integer> listTaskIndices = new ArrayList<Integer>();
 			partial.put(i, listTaskIndices);
-		}
+		} 
+		
+		LOG.info("partial: " + partialAssignment);
 		
 		/* if there is a source--task--server--sink flow of 1, then assign
-		 * task to server
+		 * task to serverad
 		 */
 		for (int i = offset; i < numTasks + offset; i++) {
 			if (flow[source][i] == 1) {
-				for (int j = numTasks + offset; j < numVertices; j++) {
-					if (flow[i][j] == 1 && flow[j][sink] == 1) {
+				LOG.info("flow["+source+"]["+i+"] is 1");
+				LOG.info("numTasks + offset: " + (numTasks+offset));
+				LOG.info("numVertices: " + numVertices);
+				for (int j = (numTasks + offset); j < numVertices; j++) {
+					LOG.info("flow["+i+"]["+j+"]: " + flow[i][j]);
+					LOG.info("flow["+j+"]["+sink+"]: " + flow[j][sink]);
+					if (flow[i][j] == 1 && flow[j][sink] > 0) {
 						int server = j - (numTasks + offset);
 						int task = i - offset;
 						List<Integer> assignedTasks = partial.get(server);
 						
+						LOG.info("assignedTasks: " + assignedTasks);
+						
 						assignedTasks.add(task);
 						partial.put(server, assignedTasks);
+						
+						flow[j][sink] -= 1;
 						
 						break ;
 					}
 				}
 			}
 		}
+		
+		LOG.info("Exiting flowToPartial");
 		return partial;
 	}
   
@@ -2819,20 +2909,20 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  // List of all map tasks that need to be assigned
 		  List<TaskInProgress> mapsList = Arrays.asList(mapTasks);
 		  
-		  // LOG.info("randomized maps: " + mapsList);
-		  // LOG.info("balAssign: num of maps is: " + mapsList.size());
+		  LOG.info("randomized maps: " + mapsList);
+		  LOG.info("balAssign: num of maps is: " + mapsList.size());
 		  
 		  int minVirtualLoad = 0;
 		  
-		   // LOG.info("taskAssignments has size: " + taskAssignments.size() + "before balAssign");
-		  // LOG.info("before balAssign taskAssignments: " + taskAssignments);
+		  LOG.info("taskAssignments has size: " + taskAssignments.size() + "before balAssign");
+		  LOG.info("before balAssign taskAssignments: " + taskAssignments);
 		  
 		  /* while there are unassigned maps,
 		   * loop over the task trackers and assign maps greedily
 		   */
 		  for (int i = 0; i < mapsList.size(); i++) {
-			  // LOG.info("For map[" + i + "] taskAssignments has size: " + taskAssignments.size());
-			  // LOG.info("For map[" + i + "] taskAssignments is: " + taskAssignments);
+			  LOG.info("For map[" + i + "] taskAssignments has size: " + taskAssignments.size());
+			  LOG.info("For map[" + i + "] taskAssignments is: " + taskAssignments);
 			  TrackerTasks minTrackerTasks = taskAssignments.poll();
 			  TaskInProgress nextTask = mapTasks[i];
 			  List<TaskInProgress> assignedTasks = minTrackerTasks.getTasks();
@@ -2849,86 +2939,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  }
 		  
 		  minVirtualLoad = taskAssignments.peek().getVirtualLoad();
-		  // LOG.info("taskAssignments has " + taskAssignments.size() + "nodes");
+		  LOG.info("taskAssignments has " + taskAssignments.size() + "nodes");
 		  if (taskAssignments.size() > taskTrackers.size()) {
 			  LOG.info("taskAssignments is too big: " + taskAssignments);
 		  }
 		  return minVirtualLoad;
       }
-		  /*
-    	  if (!currTrackerLoads.values().isEmpty()) {
-			  minVirtualLoad = Collections.min(currTrackerLoads.values());
-    	  }
-    	  
-    	  if (LOG.isDebugEnabled()) {
-	    	  LOG.debug("balAssign: minVirtualLoad is initially: " + minVirtualLoad);
-			  LOG.debug("balAssign: " +
-			  		"Confirming that currTrackerLoads has size: " + currTrackerLoads.size());
-    	  }
-		  // index of next task to be assigned (head of remaining) in mapTasks
-		  String ttName_debug = "hello";
-		  
-		  /* while there are unassigned maps,
-		   * loop over the task trackers and assign maps greedily
-		   */
-		  /*
-		  int i = 0;
-		  while (i < mapsList.size()) {
-			  Iterator it = currTrackerLoads.entrySet().iterator();
-			  while	(it.hasNext() && i < mapsList.size()) {
-				  Map.Entry pairs = (Map.Entry)it.next();
-				  // virtual load for this tracker
-				  int virtualLoad = ((Integer) pairs.getValue()).intValue();
-				  // name of task tracker
-				  String taskTrackerName = (String)pairs.getKey();
-				  // List of tasks for this taskTracker
-				  List<TaskInProgress> newTasks = 
-					  currTrackerTasks.get(taskTrackerName);
-				  // TaskTrackerStatus for this taskTracker
-				  TaskTrackerStatus tts = 
-					  taskTrackers.get(taskTrackerName).getStatus();
-				  // locality level for this taskTracker
-				  int lvl = -1;
-				  // cost of assignment (used for virtual load)
-				  int cost = 0;
-				  // index of and the next assigned task
-				  TaskInProgress nextTask = mapTasks[i];
-				  //LOG.debug("balAssign: virtual load for " + taskTrackerName + " is " + virtualLoad);
-				  if (virtualLoad == minVirtualLoad) {
-					  // assign a new task to this taskTracker
-					  newTasks.add(nextTask);
-					  currTrackerTasks.put(taskTrackerName, newTasks);
-					  //mapsList.remove(0);
-					
-					  // increment the virtual load
-					  // 	is the task just assigned local?
-					  //	is the task just assigned nonlocal?
-					  lvl = job.getLocalityLevel(nextTask, tts);
-					  cost = 1 + lvl;
-					  if (LOG.isDebugEnabled()) {
-						  if (lvl == 0) {
-							  LOG.debug("Assigning data-local task");
-						  }
-						  else if (lvl == 1) {
-							  LOG.debug("Assigning rack-local task");
-						  }
-						  else {
-							  LOG.debug("Assigning remote task of cost " + lvl);
-						  }
-					  }
-					  
-					  virtualLoad += cost;
-					  currTrackerLoads.put(taskTrackerName, virtualLoad);
-					  minVirtualLoad = Collections.min(currTrackerLoads.values());
-					  ttName_debug = taskTrackerName;
-					  ++i;
-				  }
-			  }
-		  } 
-		  // LOG.debug("Tasks for " + ttName_debug + ":" 
-				  // + currTrackerTasks.get(ttName_debug).toString());
-		  return Collections.max(currTrackerLoads.values());
-      } */
       LOG.info("Job is null, nothing to bal assign....");
       return -1;
   }

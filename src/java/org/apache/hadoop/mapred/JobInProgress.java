@@ -665,7 +665,7 @@ public class JobInProgress {
     	// initLocalityGraph();
     	nonRunningMapCache = createCache(taskSplitMetaInfo, maxLevel);
     }
-    jobtracker.scheduleTasksAllJobs(maps);
+    jobtracker.scheduleTasksAllJobs(maps, numMapTasks);
     LOG.info("Locality graph: " + getLocalityGraph());
         
     // set the launch time
