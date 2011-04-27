@@ -2548,7 +2548,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  localityGraph.put(i, trackers);
 		  }
 		  initTrackerStructs(maps, numMaps);
-		  LOG.info("Time before scheduling tasks for this job: " 
+		  LOG.info("TIME: before scheduling tasks for this job: " 
 				  + (System.currentTimeMillis()-scheduleStartTime));
 		  scheduleTasks(job, maps, servers, numServers, numMaps, localityGraph);
 		  LOG.info("TIME: Scheduling took: " 
@@ -2590,6 +2590,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		 // LOG.info("Before iteration " + i + "trackerTasks is: " + trackerTasks);
 		 // LOG.info("Before iteration " + i + "mapsToAssign is " + mapsToAssign);
 		 // LOG.info("Before iteration " + i + "taskAssignments is " + taskAssignments);
+		  long assignTime = System.currentTimeMillis();
 		  Map<Integer,List<Integer>> placementGraph 
 		  	= initPlacementGraph(mapTasks.length, numServers, localityGraph, servers);
 		  maxFlow 
@@ -2608,6 +2609,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		  // if maxCover returns a full assignment, 
 		  // 	we are done
 		  
+		  assignTime = System.currentTimeMillis() - assignTime;
+		  LOG.info("TIME: maxCover took: " + assignTime);
+		  
+		  assignTime = System.currentTimeMillis();
 		  
 		  currMaxLoad 
 		  	= balAssign(job, 
@@ -2616,6 +2621,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  LOG.debug("Tried to assign tasks to a null job");
 			  break ;
 		  }
+		  
+		  assignTime = System.currentTimeMillis() - assignTime;
+		  LOG.info("TIME: balAssign took: " + assignTime);
 		  // if we find a better max Load, or it is the first iteration, then assign tasks
 		  if (currMaxLoad < leastMaxLoad || i == 1) {
 				 /* LOG.info("currMaxLoad of " + currMaxLoad + "is less than prevMaxLoad of "
@@ -2711,16 +2719,27 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  LOG.info("partialAssignment: " + partialAssignment);
 	  */
 	
+	  long time = System.currentTimeMillis();
 	  capacity = placementToCapacity(placementGraph, numServers, numTasks, tao);
+	  time = System.currentTimeMillis() - time;
+	  LOG.info("maxCover: placementToCapacity took: " + time);
 	  // LOG.info("capacity before partialToFlow: ");
 	  // printFlow(capacity, numVertices);
+	  time = System.currentTimeMillis();
 	  flow = partialToFlow(partialAssignment, numServers, numTasks);
+	  time = System.currentTimeMillis() - time;
+	  LOG.info("maxCover: partialToFlow took: " + time);
+	  
+	  time = System.currentTimeMillis();
 	  capacity = flowToCapacityInput(flow, capacity, numVertices);
+	  time = System.currentTimeMillis() - time;
+	  LOG.info("maxCover: flowToCapacityInput took: " + time);
 	  // LOG.info("capacity before: ");
 	  // printFlow(capacity, numVertices);
 	  // LOG.info("flow before: ");
 	  // printFlow(flow, numVertices);
 	  
+	  time = System.currentTimeMillis();
 	  FlowNetwork fn = new FlowNetwork(numVertices,
 			  						   capacity,
 			  						   0,
@@ -2728,10 +2747,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			  						   flow,
 			  						   maxFlow);
 	  // LOG.info("capacity after: ");
+	  time = System.currentTimeMillis() - time;
+	  LOG.info("maxCover: computing maxFlow took: " + time);
 	  // printFlow(capacity, numVertices);
 	  // LOG.info("flow after: ");
 	  // printFlow(fn.getFlowMatrix(), numVertices);
+	  time = System.currentTimeMillis();
 	  partialAssignment = flowToPartial(fn.getFlowMatrix(), numTasks, numServers);
+	  time = System.currentTimeMillis() - time;
+	  LOG.info("maxCover: flowToPartial took: " + time);
 	  // LOG.info("partialAssignment after: " + partialAssignment);
 	  
 	  taskAssignments.clear();
